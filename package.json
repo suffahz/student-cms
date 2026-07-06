@@ -1,7 +1,6 @@
 {
   "name": "student-management-system",
   "version": "1.0.0",
-  "description": "Fullstack Student CMS built with Node.js and deployed on Vercel",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
