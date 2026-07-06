@@ -23,7 +23,8 @@ app.set('views', path.join(__dirname, 'views'));
 // ==========================================
 // 2. SERVERLESS MONGODB CONNECTION CACHING
 // ==========================================
-const MONGODB_URI = process.env.MONGODB_URI;
+// FALLBACK CONFIGURATION: Replace with your actual database user password and cluster link from Atlas!
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://root:YOUR_PASSWORD_HERE@YOUR_CLUSTER_URL_HERE/student_cms?authSource=admin&retryWrites=true&w=majority";
 
 let cachedConnection = global.mongoose;
 if (!cachedConnection) {
@@ -37,7 +38,7 @@ async function connectDB() {
 
     if (!cachedConnection.promise) {
         const opts = {
-            bufferCommands: false, // Prevents Mongoose from hanging for 10s if connection drops
+            bufferCommands: false, // Stops Mongoose from hanging indefinitely
         };
 
         cachedConnection.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
@@ -57,15 +58,15 @@ async function connectDB() {
     return cachedConnection.conn;
 }
 
-// Global Middleware to guarantee DB connectivity per route request
+// Global Middleware to handle database route processing safely
 app.use(async (req, res, next) => {
     try {
         await connectDB();
         next();
     } catch (err) {
-        // Renders the database connection error safely onto your login screen instead of crashing Vercel
+        // Prevents a Vercel 500 crash by printing the raw error in the login view component instead
         return res.render('login', { 
-            error: `Database Connection Error: ${err.message}. Please verify your MONGODB_URI configuration password and ensure Atlas Network Access allows IP 0.0.0.0/0.` 
+            error: `Database Connection Error: ${err.message}. Ensure your password is correct and Network Access is set to 0.0.0.0/0.` 
         });
     }
 });
@@ -120,10 +121,8 @@ const NoticeSchema = new mongoose.Schema({ message: String, target: String, date
 const Notice = mongoose.models.Notice || mongoose.model('Notice', NoticeSchema);
 
 // ==========================================
-// 4. ROUTING & SYSTEM LOGIC
+// 4. ROUTING & SEED SYSTEM LOGIC
 // ==========================================
-
-// Seed admin user helper function
 async function seedAdmin() {
     try {
         const adminExists = await User.findOne({ email: 'admin@gmail.com' });
@@ -141,13 +140,16 @@ async function seedAdmin() {
     }
 }
 
-// App routing maps
 app.get('/', (req, res) => {
     res.redirect('/login');
 });
 
 app.get('/login', async (req, res) => {
-    await seedAdmin(); // Ensures admin exists when login view loads
+    try {
+        await seedAdmin();
+    } catch (e) {
+        console.log("Seed call failed execution on runtime fetch.");
+    }
     res.render('login', { error: null });
 });
 
@@ -167,7 +169,6 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// Fallback Dashboard Mocks (Renders message safely on login screen for validation)
 app.get('/admin/dashboard', (req, res) => {
     if (!req.session.user || req.session.user.role !== 'admin') return res.redirect('/login');
     res.render('login', { error: "Successfully authenticated! Admin Dashboard path reached." });
@@ -178,7 +179,4 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// ==========================================
-// 5. VERCEL SERVERLESS EXPORT
-// ==========================================
 module.exports = app;
