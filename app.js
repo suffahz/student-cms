@@ -23,7 +23,7 @@ app.set('views', path.join(__dirname, 'views'));
 // ==========================================
 // 2. SERVERLESS MONGODB CONNECTION CACHING
 // ==========================================
-// FALLBACK CONFIGURATION: Make sure your actual database user password and cluster link from Atlas are set here if not using Vercel env variables!
+// FALLBACK CONFIGURATION: If Vercel env variables are missing, place your raw Atlas details right here!
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://root:YOUR_PASSWORD_HERE@YOUR_CLUSTER_URL_HERE/student_cms?authSource=admin&retryWrites=true&w=majority";
 
 let cachedConnection = global.mongoose;
@@ -38,7 +38,7 @@ async function connectDB() {
 
     if (!cachedConnection.promise) {
         const opts = {
-            bufferCommands: false, // Disables Mongoose internal buffering to prevent 10s timeouts
+            bufferCommands: false, // Prevents Mongoose from freezing/buffering for 10s if route wakes up cold
         };
 
         cachedConnection.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
@@ -58,7 +58,7 @@ async function connectDB() {
     return cachedConnection.conn;
 }
 
-// Global Middleware to handle database route processing safely
+// Global Middleware to process database runtime execution per route request
 app.use(async (req, res, next) => {
     try {
         await connectDB();
@@ -120,7 +120,7 @@ const NoticeSchema = new mongoose.Schema({ message: String, target: String, date
 const Notice = mongoose.models.Notice || mongoose.model('Notice', NoticeSchema);
 
 // ==========================================
-// 4. ROUTING & SEED SYSTEM LOGIC
+// 4. ROUTING & SYSTEM LOGIC
 // ==========================================
 async function seedAdmin() {
     try {
@@ -147,7 +147,7 @@ app.get('/login', async (req, res) => {
     try {
         await seedAdmin();
     } catch (e) {
-        console.log("Initial seed attempt skipped.");
+        console.log("Initial seed catch handling executed.");
     }
     res.render('login', { error: null });
 });
@@ -155,7 +155,7 @@ app.get('/login', async (req, res) => {
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
-        // Enforce seeding execution right before the authentication lookup query runs
+        // Enforces seeding execution directly during the authentication lookup thread
         await seedAdmin();
 
         const user = await User.findOne({ email, password });
@@ -171,10 +171,13 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// Dashboard Route Handler Destination Mocks
+// Real Admin Dashboard UI Router Interface
 app.get('/admin/dashboard', (req, res) => {
-    if (!req.session.user || req.session.user.role !== 'admin') return res.redirect('/login');
-    res.render('login', { error: "Successfully authenticated! Admin Dashboard path reached." });
+    if (!req.session.user || req.session.user.role !== 'admin') {
+        return res.redirect('/login');
+    }
+    // Renders the functional dashboard template and passes down the logged-in session profile
+    res.render('admin-dashboard', { user: req.session.user });
 });
 
 app.get('/logout', (req, res) => {
