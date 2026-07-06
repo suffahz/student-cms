@@ -23,7 +23,7 @@ app.set('views', path.join(__dirname, 'views'));
 // ==========================================
 // 2. SERVERLESS MONGODB CONNECTION CACHING
 // ==========================================
-// FALLBACK CONFIGURATION: Replace with your actual database user password and cluster link from Atlas!
+// FALLBACK CONFIGURATION: Make sure your actual database user password and cluster link from Atlas are set here if not using Vercel env variables!
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://root:YOUR_PASSWORD_HERE@YOUR_CLUSTER_URL_HERE/student_cms?authSource=admin&retryWrites=true&w=majority";
 
 let cachedConnection = global.mongoose;
@@ -38,7 +38,7 @@ async function connectDB() {
 
     if (!cachedConnection.promise) {
         const opts = {
-            bufferCommands: false, // Stops Mongoose from hanging indefinitely
+            bufferCommands: false, // Disables Mongoose internal buffering to prevent 10s timeouts
         };
 
         cachedConnection.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
@@ -64,7 +64,6 @@ app.use(async (req, res, next) => {
         await connectDB();
         next();
     } catch (err) {
-        // Prevents a Vercel 500 crash by printing the raw error in the login view component instead
         return res.render('login', { 
             error: `Database Connection Error: ${err.message}. Ensure your password is correct and Network Access is set to 0.0.0.0/0.` 
         });
@@ -148,7 +147,7 @@ app.get('/login', async (req, res) => {
     try {
         await seedAdmin();
     } catch (e) {
-        console.log("Seed call failed execution on runtime fetch.");
+        console.log("Initial seed attempt skipped.");
     }
     res.render('login', { error: null });
 });
@@ -156,6 +155,9 @@ app.get('/login', async (req, res) => {
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
+        // Enforce seeding execution right before the authentication lookup query runs
+        await seedAdmin();
+
         const user = await User.findOne({ email, password });
         if (user) {
             req.session.user = user;
@@ -169,6 +171,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
+// Dashboard Route Handler Destination Mocks
 app.get('/admin/dashboard', (req, res) => {
     if (!req.session.user || req.session.user.role !== 'admin') return res.redirect('/login');
     res.render('login', { error: "Successfully authenticated! Admin Dashboard path reached." });
@@ -179,4 +182,7 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
+// ==========================================
+// 5. VERCEL SERVERLESS EXPORT
+// ==========================================
 module.exports = app;
